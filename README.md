@@ -7,6 +7,8 @@ dunst + waybar), con no molestar automático mientras estás en una llamada.
   *Unirse* que abre el Meet/Zoom/Teams.
 - **Barra**: módulo `custom/redus` junto al reloj con la próxima reunión y
   cuenta regresiva; al pasar el mouse, la agenda de hoy y mañana.
+- **Agenda del día**: de lunes a viernes, al iniciar sesión por la mañana se
+  abre una ventana con tus reuniones del día en formato calendario.
 - **Llamadas**: si un programa usa el micrófono (salvo Discord, cava, etc.)
   pausa dunst; al colgar lo reanuda y aparece lo que quedó en cola.
 
@@ -64,7 +66,7 @@ que pedir que permitan el cliente.
 | Acción en la barra | Qué hace |
 |---|---|
 | Pasar el mouse | Agenda de hoy y mañana, estado de llamada y errores |
-| Clic izquierdo | Menú rofi con las reuniones; Enter abre la videollamada |
+| Clic izquierdo | Menú rofi: "Ver agenda del día" y las reuniones; Enter abre la videollamada |
 | Clic derecho | No molestar manual (siempre en pausa) ↔ automático |
 | Clic central | Sincronizar ya |
 
@@ -85,6 +87,9 @@ redus status                  diagnóstico
 redus sync                    sincronizar ahora
 redus dnd [toggle|on|auto]    no molestar manual
 redus menu                    menú de reuniones
+redus agenda                  vista del día
+redus profiles                perfil de Chrome de cada cuenta
+redus open <url> [correo]     abre un enlace en el perfil de esa cuenta
 redus auth add|list|remove    cuentas
 ```
 
@@ -102,9 +107,39 @@ valor por defecto):
   "ignore_apps": ["discord", "vesktop", "cava", "pavucontrol", "easyeffects", "obs"],
   "waybar_signal": 11,
   "countdown_minutes": 60,
-  "urgent_minutes": 2
+  "urgent_minutes": 2,
+  "agenda_on_startup": true,
+  "agenda_days": [1, 2, 3, 4, 5],
+  "agenda_from": "06:00",
+  "agenda_until": "12:00",
+  "agenda_width": 860,
+  "agenda_height": 900,
+  "browser": "google-chrome-stable",
+  "browser_profiles": {}
 }
 ```
+
+`agenda_days` usa 0 = domingo … 6 = sábado.
+
+### Perfil de Chrome por cuenta
+
+Cada reunión se abre en el perfil de Chrome donde está iniciada su cuenta
+(una de `adipa.co` en el perfil de `adipa.co`, no en el personal). redus lo
+detecta solo leyendo `~/.config/google-chrome/Local State`; para ver el
+mapeo: `redus profiles`. Si una cuenta no tiene perfil propio, o quieres
+otro, fíjalo en la config:
+
+```json
+{ "browser_profiles": { "jaime@adipa.co": "Profile 3" } }
+```
+
+Además, a los enlaces de Meet y Calendar se les agrega `authuser=<correo>`
+para que Google use esa cuenta aunque el perfil tenga varias sesiones.
+
+Los enlaces de la vista de agenda pasan por el protocolo `redus://` (lo
+registra el instalador), porque la página corre dentro de Chrome y abriría
+todo en su propio perfil. La primera vez Chrome pregunta si abrir
+`xdg-open`: marca *Permitir siempre* y acepta.
 
 `ignore_apps` se compara (sin mayúsculas, por contenido) con el nombre de la
 aplicación y el binario que captura el micrófono. Para ver qué detecta:
@@ -127,6 +162,15 @@ Tras cambiarla: `systemctl --user restart redus`.
   cercano. Si una reunión ya empezó y no se avisó (el PC estaba apagado),
   avisa "En curso: empezó hace N min" mientras no termine. Una reunión
   invitada en dos cuentas avisa una vez.
+
+- **Agenda del día**: HTML local en `~/.cache/redus/agenda.html`, que el
+  daemon regenera en cada sincronización (la ventana se recarga sola cada
+  2 min). Se abre con el navegador en modo `--app` y se hace flotante con
+  `hyprctl` (sintaxis Lua de Hyprland ≥ 0.55, con la clásica de respaldo).
+  Se abre una vez por día (`~/.cache/redus/agenda-shown`), la primera vez
+  que el daemon corre dentro de la franja en un día de `agenda_days`. Espera
+  a la primera sincronización; si no hay red, abre con el caché a los 2 min.
+  Si el PC queda prendido de noche, se abre al entrar en la franja (06:00).
 
 Logs: `journalctl --user -u redus -f`.
 

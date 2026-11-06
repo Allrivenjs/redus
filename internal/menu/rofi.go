@@ -15,18 +15,18 @@ import (
 )
 
 // Show abre rofi con las reuniones que no han terminado y abre el enlace de
-// la elegida (la videollamada o, si no tiene, el evento en Calendar).
-func Show(events []store.Event, accounts []string, now time.Time) error {
-	events = store.Upcoming(events, now)
-	if len(events) == 0 {
-		msg := "No hay reuniones próximas."
-		if len(accounts) == 0 {
-			msg = "Sin cuentas conectadas. Usa: redus auth add"
-		}
-		return exec.Command("rofi", "-e", msg).Run()
+// la elegida (la videollamada o, si no tiene, el evento en Calendar). La
+// primera opción abre la vista del día con openAgenda.
+func Show(events []store.Event, accounts []string, now time.Time, openAgenda func() error, open func(link, account string) error) error {
+	if len(accounts) == 0 {
+		return exec.Command("rofi", "-e", "Sin cuentas conectadas. Usa: redus auth add").Run()
 	}
+	events = store.Upcoming(events, now)
 	multi := len(accounts) > 1
-	var lines []string
+	lines := []string{"<b>\U000F00ED  Ver agenda del día</b>"}
+	if len(events) == 0 {
+		lines = append(lines, "<i>No hay reuniones próximas</i>")
+	}
 	for _, e := range events {
 		lines = append(lines, row(e, now, multi))
 	}
@@ -44,7 +44,14 @@ func Show(events []store.Event, accounts []string, now time.Time) error {
 		return err
 	}
 	i, err := strconv.Atoi(strings.TrimSpace(out.String()))
-	if err != nil || i < 0 || i >= len(events) {
+	if err != nil {
+		return nil
+	}
+	if i == 0 {
+		return openAgenda()
+	}
+	i-- // la fila 0 es la agenda
+	if i < 0 || i >= len(events) {
 		return nil
 	}
 	e := events[i]
@@ -55,7 +62,7 @@ func Show(events []store.Event, accounts []string, now time.Time) error {
 	if link == "" {
 		return fmt.Errorf("la reunión %q no tiene enlace", e.Title)
 	}
-	return exec.Command("xdg-open", link).Start()
+	return open(link, e.Account)
 }
 
 func row(e store.Event, now time.Time, multi bool) string {

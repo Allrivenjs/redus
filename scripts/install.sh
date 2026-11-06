@@ -20,6 +20,13 @@ systemctl --user daemon-reload
 systemctl --user enable redus.service >/dev/null
 systemctl --user restart redus.service
 
+echo "==> Protocolo redus:// (enlaces de la agenda)"
+apps="${XDG_DATA_HOME:-$HOME/.local/share}/applications"
+mkdir -p "$apps"
+sed "s|^Exec=redus |Exec=$bin/redus |" "$repo/contrib/desktop/redus-open.desktop" >"$apps/redus-open.desktop"
+xdg-mime default redus-open.desktop x-scheme-handler/redus
+update-desktop-database "$apps" 2>/dev/null || true
+
 echo "==> Módulo de waybar"
 mkdir -p "$wb/modules" "$wb/layouts"
 cp "$repo/contrib/waybar/redus.jsonc" "$wb/modules/redus.jsonc"

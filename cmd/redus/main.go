@@ -10,6 +10,8 @@ import (
 	"strings"
 	"time"
 
+	"github.com/Allrivenjs/redus/internal/agenda"
+	"github.com/Allrivenjs/redus/internal/browser"
 	"github.com/Allrivenjs/redus/internal/calls"
 	"github.com/Allrivenjs/redus/internal/config"
 	"github.com/Allrivenjs/redus/internal/daemon"
@@ -25,6 +27,9 @@ Uso:
   redus daemon              corre el servicio (lo lanza systemd)
   redus waybar              imprime el JSON del módulo de waybar
   redus menu                lista las reuniones en rofi y abre la elegida
+  redus agenda              abre la vista del día
+  redus open <url> [correo] abre un enlace en el perfil de Chrome de esa cuenta
+  redus profiles            muestra qué perfil de Chrome usa cada cuenta
   redus sync                sincroniza los calendarios ahora
   redus dnd [toggle|on|auto|status]
                             no molestar manual (auto = solo en llamadas)
@@ -59,7 +64,39 @@ func run(args []string) error {
 		return printWaybar(cfg)
 	case "menu":
 		c, _ := store.LoadCache()
-		return menu.Show(c.Events, c.Accounts, time.Now())
+		return menu.Show(c.Events, c.Accounts, time.Now(),
+			func() error { return openAgenda(cfg) }, daemon.Opener(cfg).Open)
+	case "agenda":
+		return openAgenda(cfg)
+	case "open":
+		if len(args) < 2 {
+			return fmt.Errorf("uso: redus open <url> [correo]")
+		}
+		acc := ""
+		if len(args) > 2 {
+			acc = args[2]
+		}
+		return daemon.Opener(cfg).Open(args[1], acc)
+	case "open-uri": // lo invoca xdg-open con enlaces redus:// de la agenda
+		if len(args) < 2 {
+			return fmt.Errorf("uso: redus open-uri redus://open?url=...")
+		}
+		link, acc, ok := browser.ParseSchemeURL(args[1])
+		if !ok {
+			return fmt.Errorf("enlace no válido: %s", args[1])
+		}
+		return daemon.Opener(cfg).Open(link, acc)
+	case "profiles":
+		c, _ := store.LoadCache()
+		o := daemon.Opener(cfg)
+		for _, a := range c.Accounts {
+			p := o.ProfileFor(a)
+			if p == "" {
+				p = "(sin perfil: navegador por defecto)"
+			}
+			fmt.Printf("%-32s %s\n", a, p)
+		}
+		return nil
 	case "sync":
 		if !daemon.Signal(daemon.SigSync) {
 			return fmt.Errorf("el daemon no está corriendo: systemctl --user start redus")
@@ -76,6 +113,15 @@ func run(args []string) error {
 		return nil
 	}
 	return fmt.Errorf("comando desconocido %q\n\n%s", args[0], usage)
+}
+
+func openAgenda(cfg config.Config) error {
+	c, _ := store.LoadCache()
+	path, err := agenda.Write(c, time.Now())
+	if err != nil {
+		return err
+	}
+	return agenda.Open(path, cfg.Browser, cfg.AgendaWidth, cfg.AgendaHeight)
 }
 
 func printWaybar(cfg config.Config) error {

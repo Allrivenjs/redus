@@ -76,3 +76,33 @@ func TestRemindMeetingAlreadyStarted(t *testing.T) {
 		t.Fatalf("avisos %v, esperaba solo la reunión en curso", titles)
 	}
 }
+
+func TestShouldOpenAgenda(t *testing.T) {
+	cfg := config.Default()
+	mon := func(h, m int) time.Time { return time.Date(2026, 11, 9, h, m, 0, 0, time.Local) } // lunes
+	boot := mon(8, 2)
+	synced := boot.Add(5 * time.Second)
+
+	cases := []struct {
+		name  string
+		now   time.Time
+		start time.Time
+		sync  time.Time
+		shown string
+		want  bool
+	}{
+		{"lunes 8:02, ya sincronizó", boot.Add(20 * time.Second), boot, synced, "", true},
+		{"recién arrancado", boot.Add(5 * time.Second), boot, synced, "", false},
+		{"sin red: espera", boot.Add(time.Minute), boot, time.Time{}, "", false},
+		{"sin red: abre con caché a los 2 min", boot.Add(2 * time.Minute), boot, time.Time{}, "", true},
+		{"ya se mostró hoy", boot.Add(time.Minute), boot, synced, "2026-11-09", false},
+		{"se mostró ayer", boot.Add(time.Minute), boot, synced, "2026-11-06", true},
+		{"después de mediodía", mon(13, 0), mon(12, 59), mon(12, 59).Add(time.Second), "", false},
+		{"sábado", boot.AddDate(0, 0, 5).Add(time.Minute), boot.AddDate(0, 0, 5), synced.AddDate(0, 0, 5), "", false},
+	}
+	for _, c := range cases {
+		if got := shouldOpenAgenda(cfg, c.now, c.start, c.sync, c.shown); got != c.want {
+			t.Errorf("%s: %v, esperaba %v", c.name, got, c.want)
+		}
+	}
+}

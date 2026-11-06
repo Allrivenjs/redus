@@ -17,6 +17,8 @@ import (
 	"syscall"
 	"time"
 
+	"github.com/Allrivenjs/redus/internal/agenda"
+	"github.com/Allrivenjs/redus/internal/browser"
 	"github.com/Allrivenjs/redus/internal/calls"
 	"github.com/Allrivenjs/redus/internal/config"
 	"github.com/Allrivenjs/redus/internal/dnd"
@@ -42,6 +44,9 @@ type daemon struct {
 	notified  map[string]time.Time
 	// sendFn envía el aviso; se reemplaza en los tests.
 	sendFn func(store.Event, time.Time)
+
+	startedAt  time.Time
+	lastSyncOK time.Time // última sincronización sin errores
 }
 
 // Run corre el daemon hasta recibir SIGINT/SIGTERM.
@@ -60,6 +65,7 @@ func Run(ctx context.Context, cfg config.Config) error {
 		notified: store.LoadNotified(),
 	}
 	d.sendFn = d.send
+	d.startedAt = time.Now()
 	// Retoma el estado anterior: si redus dejó dunst en pausa (p. ej. se
 	// cayó durante una llamada), se considera propia.
 	if prev, err := store.LoadStatus(); err == nil && prev.Paused {
@@ -80,6 +86,7 @@ func Run(ctx context.Context, cfg config.Config) error {
 	d.checkCall(ctx)
 	d.sync(ctx)
 	d.remind(time.Now())
+	d.maybeAgenda(time.Now())
 
 	callT := time.NewTicker(cfg.CallPollInterval.Duration)
 	syncT := time.NewTicker(cfg.SyncInterval.Duration)
@@ -107,6 +114,7 @@ func Run(ctx context.Context, cfg config.Config) error {
 			d.sync(ctx)
 		case now := <-remindT.C:
 			d.remind(now)
+			d.maybeAgenda(now)
 		}
 	}
 }
@@ -181,7 +189,10 @@ func (d *daemon) sync(ctx context.Context) {
 	prev, _ := store.LoadCache()
 	cache := store.Cache{UpdatedAt: time.Now(), Accounts: accounts, Errors: map[string]string{}}
 	now := time.Now()
-	from := now.Add(-12 * time.Hour)
+	from := startOfDay(now) // el día completo, para la vista de agenda
+	if t := now.Add(-12 * time.Hour); t.Before(from) {
+		from = t
+	}
 	to := startOfDay(now).AddDate(0, 0, d.cfg.LookaheadDays+1)
 
 	for _, acc := range accounts {
@@ -206,7 +217,55 @@ func (d *daemon) sync(ctx context.Context) {
 		log.Printf("guardando caché: %v", err)
 		return
 	}
+	if len(accounts) > 0 && cache.Errors == nil {
+		d.lastSyncOK = now
+	}
+	// la ventana de agenda, si está abierta, se recarga sola con este archivo
+	if _, err := agenda.Write(cache, now); err != nil {
+		log.Printf("generando agenda: %v", err)
+	}
 	RefreshWaybar(d.cfg)
+}
+
+// maybeAgenda abre la vista del día una vez por jornada, la primera vez que
+// el daemon está activo dentro de la franja configurada en un día laboral.
+func (d *daemon) maybeAgenda(now time.Time) {
+	shown, _ := os.ReadFile(config.AgendaShownFile())
+	if !shouldOpenAgenda(d.cfg, now, d.startedAt, d.lastSyncOK, strings.TrimSpace(string(shown))) {
+		return
+	}
+	cache, _ := store.LoadCache()
+	path, err := agenda.Write(cache, now)
+	if err != nil {
+		log.Printf("generando agenda: %v", err)
+		return
+	}
+	if err := agenda.Open(path, d.cfg.Browser, d.cfg.AgendaWidth, d.cfg.AgendaHeight); err != nil {
+		log.Printf("abriendo agenda: %v", err)
+		return
+	}
+	_ = os.WriteFile(config.AgendaShownFile(), []byte(now.Format("2006-01-02")+"\n"), 0o600)
+	log.Printf("agenda del día abierta")
+}
+
+func shouldOpenAgenda(cfg config.Config, now, startedAt, lastSyncOK time.Time, shownDay string) bool {
+	if !cfg.AgendaOnStartup || shownDay == now.Format("2006-01-02") {
+		return false
+	}
+	if !slices.Contains(cfg.AgendaDays, int(now.Weekday())) {
+		return false
+	}
+	from, until := cfg.AgendaWindow()
+	m := now.Hour()*60 + now.Minute()
+	if m < from || m >= until {
+		return false
+	}
+	up := now.Sub(startedAt)
+	if up < 15*time.Second {
+		return false // deja que termine de cargar el escritorio
+	}
+	// espera datos frescos; si no hay red, abre con el caché a los 2 min
+	return lastSyncOK.After(startedAt) || up >= 2*time.Minute
 }
 
 func (d *daemon) fetch(ctx context.Context, acc string, from, to time.Time) ([]store.Event, error) {
@@ -305,8 +364,9 @@ func (d *daemon) send(e store.Event, now time.Time) {
 		Body:    body,
 		Urgency: u,
 		JoinURL: e.JoinURL,
+		Account: e.Account,
 		Icon:    "appointment-soon",
-	})
+	}, Opener(d.cfg).Open)
 	if err != nil {
 		log.Printf("notificando %q: %v", e.Title, err)
 	}
@@ -340,6 +400,11 @@ func ago(d time.Duration) string {
 func startOfDay(t time.Time) time.Time {
 	y, m, dd := t.Date()
 	return time.Date(y, m, dd, 0, 0, 0, 0, t.Location())
+}
+
+// Opener abre enlaces en el perfil de Chrome de cada cuenta.
+func Opener(cfg config.Config) browser.Opener {
+	return browser.Opener{Browser: cfg.Browser, Profiles: cfg.BrowserProfiles}
 }
 
 // RefreshWaybar pide a waybar que vuelva a ejecutar el módulo.

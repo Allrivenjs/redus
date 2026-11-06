@@ -22,13 +22,17 @@ type Message struct {
 	Body    string
 	Urgency Urgency
 	JoinURL string
+	Account string // cuenta de la reunión, para abrirla en su perfil
 	Icon    string
 }
+
+// OpenFunc abre un enlace para una cuenta.
+type OpenFunc func(link, account string) error
 
 // Send muestra la notificación sin bloquear. Si lleva botón, espera en
 // segundo plano la respuesta (hasta 30 min, porque con dunst en pausa la
 // notificación puede quedar en cola).
-func Send(m Message) error {
+func Send(m Message, open OpenFunc) error {
 	args := []string{"--app-name=redus", "--urgency=" + string(orDefault(m.Urgency))}
 	if m.Icon != "" {
 		args = append(args, "--icon="+m.Icon)
@@ -43,7 +47,7 @@ func Send(m Message) error {
 		defer cancel()
 		out, err := exec.CommandContext(ctx, "notify-send", args...).Output()
 		if err == nil && strings.TrimSpace(string(out)) == "join" {
-			_ = exec.Command("xdg-open", m.JoinURL).Start()
+			_ = open(m.JoinURL, m.Account)
 		}
 	}()
 	return nil

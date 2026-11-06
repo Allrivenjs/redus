@@ -1,0 +1,8 @@
+[Desktop Entry]
+Type=Application
+Name=redus
+Comment=Abre reuniones en el perfil de Chrome de cada cuenta
+Exec=redus open-uri %u
+MimeType=x-scheme-handler/redus;
+NoDisplay=true
+Terminal=false

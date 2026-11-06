@@ -20,5 +20,6 @@ fi
 rm -f "$wb/modules/redus.jsonc" "$wb/layouts/redus.jsonc" "$wb/layouts/.redus-previous"
 [[ -f "$wb/user-style.css" ]] && sed -i '/\/\* >>> redus \*\//,/\/\* <<< redus \*\//d' "$wb/user-style.css"
 pkill -SIGUSR2 -x waybar || true
+rm -f "${XDG_DATA_HOME:-$HOME/.local/share}/applications/redus-open.desktop"
 rm -f "$HOME/.local/bin/redus"
 echo "redus desinstalado. Tus cuentas siguen en $cfg/redus (bórralo si no las quieres)."

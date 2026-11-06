@@ -1,0 +1,187 @@
+<!doctype html>
+<html lang="es">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>{{.Title}}</title>
+<style>
+  :root {
+    --base: #1e1e2e; --mantle: #181825; --crust: #11111b;
+    --surface0: #313244; --surface1: #45475a; --overlay0: #6c7086;
+    --text: #cdd6f4; --subtext: #a6adc8; --red: #f38ba8; --green: #a6e3a1;
+    --yellow: #f9e2af; --blue: #89b4fa;
+  }
+  * { box-sizing: border-box; }
+  [hidden] { display: none !important; }
+  html, body { margin: 0; background: var(--base); color: var(--text);
+    font: 14px/1.4 "Inter", "Noto Sans", system-ui, sans-serif; }
+  body { padding: 20px 24px 28px; }
+  header { display: flex; justify-content: space-between; align-items: flex-start; gap: 16px; }
+  h1 { margin: 0; font-size: 22px; font-weight: 650; letter-spacing: -0.01em; }
+  .summary { color: var(--subtext); margin-top: 2px; font-size: 13px; }
+  .clock { font: 600 26px/1 "JetBrains Mono", ui-monospace, monospace; color: var(--subtext);
+    font-variant-numeric: tabular-nums; }
+
+  .next { margin: 16px 0 6px; padding: 12px 14px; border-radius: 10px; background: var(--surface0);
+    display: flex; align-items: center; gap: 12px; border-left: 4px solid var(--blue); }
+  .next.soon { border-left-color: var(--yellow); }
+  .next.now { border-left-color: var(--red); }
+  .next .label { color: var(--subtext); font-size: 12px; text-transform: uppercase; letter-spacing: .06em; }
+  .next .what { font-weight: 600; font-size: 15px; }
+  .next .grow { flex: 1; min-width: 0; }
+  .next .what, .ev .t { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .btn { display: inline-block; padding: 7px 14px; border-radius: 8px; background: var(--blue);
+    color: var(--crust); font-weight: 650; text-decoration: none; white-space: nowrap; }
+  .btn:hover { filter: brightness(1.1); }
+  .next.now .btn { background: var(--red); }
+
+  .allday { display: flex; flex-wrap: wrap; gap: 6px; margin: 12px 0 4px; }
+  .chip { padding: 3px 10px; border-radius: 999px; background: var(--surface0); font-size: 12px;
+    border-left: 3px solid; }
+
+  .grid { position: relative; margin-top: 14px; margin-left: 52px; }
+  .hour { position: absolute; left: 0; right: 0; height: 0; border-top: 1px solid var(--surface0); }
+  .hour span { position: absolute; top: -9px; left: -52px; width: 44px; text-align: right;
+    font: 12px ui-monospace, monospace; color: var(--overlay0); }
+  .cols { position: absolute; inset: 0 0 0 0; }
+  .ev { position: absolute; padding: 4px 8px; border-radius: 7px; overflow: hidden;
+    background: color-mix(in srgb, var(--c) 22%, var(--mantle)); border-left: 3px solid var(--c);
+    color: var(--text); text-decoration: none; display: block; transition: filter .15s; }
+  .ev:hover { filter: brightness(1.18); z-index: 2; }
+  .ev .t { font-weight: 600; font-size: 13px; }
+  .ev .m { color: var(--subtext); font-size: 12px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .ev.short { display: flex; gap: 8px; align-items: baseline; padding-top: 2px; }
+  .ev.past { opacity: .42; }
+  .ev.live { box-shadow: 0 0 0 2px var(--c); }
+  .ev .badge { font-size: 10px; font-weight: 700; text-transform: uppercase; color: var(--c); letter-spacing: .05em; }
+  .now-line { position: absolute; left: -6px; right: 0; height: 2px; background: var(--red); z-index: 3; pointer-events: none; }
+  .now-line::before { content: ""; position: absolute; left: -4px; top: -4px; width: 10px; height: 10px;
+    border-radius: 50%; background: var(--red); }
+
+  .empty { margin-top: 40px; text-align: center; color: var(--subtext); font-size: 15px; }
+  footer { margin-top: 28px; padding-top: 14px; border-top: 1px solid var(--surface0); font-size: 13px; }
+  footer h2 { margin: 0 0 6px; font-size: 13px; color: var(--subtext); font-weight: 600; }
+  .tm { display: flex; gap: 10px; padding: 2px 0; }
+  .tm .h { font-family: ui-monospace, monospace; color: var(--subtext); }
+  .dot { display: inline-block; width: 8px; height: 8px; border-radius: 50%; margin-right: 6px; }
+  .meta { display: flex; flex-wrap: wrap; gap: 14px; margin-top: 12px; color: var(--overlay0); font-size: 12px; }
+  .err { color: var(--red); margin-top: 6px; font-size: 12px; }
+</style>
+</head>
+<body>
+<header>
+  <div>
+    <h1>{{.DateLabel}}</h1>
+    <div class="summary">{{.Summary}}</div>
+  </div>
+  <div class="clock" id="clock"></div>
+</header>
+
+<div class="next" id="next" hidden>
+  <div class="grow">
+    <div class="label" id="next-label"></div>
+    <div class="what" id="next-what"></div>
+  </div>
+  <a class="btn" id="next-join" hidden>Unirse</a>
+</div>
+
+{{if .AllDay}}<div class="allday">{{range .AllDay}}<span class="chip" style="border-color:{{.Color}}">{{.Title}}</span>{{end}}</div>{{end}}
+
+{{if .Blocks}}
+<div class="grid" style="height:{{.GridHeight}}px">
+  {{range .Hours}}<div class="hour" style="top:{{.Top}}px"><span>{{.Label}}</span></div>{{end}}
+  <div class="cols">
+    {{range .Blocks}}
+    <a class="ev{{if .Short}} short{{end}}" {{if .Link}}href="{{.Link}}"{{end}}
+       data-start="{{.StartMS}}" data-end="{{.EndMS}}"
+       style="--c:{{.Color}};top:{{.Top}}px;height:{{.Height}}px;left:calc({{.Left}}% + 2px);width:calc({{.Width}}% - 4px)"
+       title="{{.Title}} · {{.TimeText}}{{if $.MultiAcc}} · {{.Account}}{{end}}">
+      <div class="t">{{.Title}}</div>
+      <div class="m"><span class="badge"></span> {{.TimeText}}{{if $.MultiAcc}} · {{.Account}}{{end}}{{if not .HasJoin}} · sin enlace{{end}}</div>
+    </a>
+    {{end}}
+  </div>
+  <div class="now-line" id="now-line" hidden></div>
+</div>
+{{else}}
+<div class="empty">Sin reuniones con hora para hoy.</div>
+{{end}}
+
+<footer>
+  <h2>{{.TomorrowLbl}}</h2>
+  {{range .Tomorrow}}<div class="tm"><span class="h">{{.Time}}</span><span><span class="dot" style="background:{{.Color}}"></span>{{.Title}}</span></div>
+  {{else}}<div class="tm" style="color:var(--overlay0)">Sin reuniones.</div>{{end}}
+  <div class="meta">
+    {{if .MultiAcc}}{{range .Legend}}<span><span class="dot" style="background:{{.Color}}"></span>{{.Account}}</span>{{end}}{{end}}
+    {{if .Synced}}<span>Sincronizado {{.Synced}}</span>{{end}}
+    <span>Esc para cerrar</span>
+  </div>
+  {{range .Errors}}<div class="err">⚠ {{.}}</div>{{end}}
+</footer>
+
+<script>
+const EVENTS = {{.EventsJSON}};
+const GRID_START = {{.GridStartMS}};
+const PX_PER_MIN = {{.PxPerMin}};
+const pad = n => String(n).padStart(2, "0");
+
+function fmtLeft(ms) {
+  const m = Math.ceil(ms / 60000);
+  if (m < 60) return m + " min";
+  return Math.floor(m / 60) + " h " + pad(m % 60);
+}
+
+function tick() {
+  const now = Date.now();
+  const d = new Date(now);
+  document.getElementById("clock").textContent = pad(d.getHours()) + ":" + pad(d.getMinutes());
+
+  document.querySelectorAll(".ev").forEach(el => {
+    const s = +el.dataset.start, e = +el.dataset.end;
+    el.classList.toggle("past", e <= now);
+    el.classList.toggle("live", s <= now && now < e);
+    el.querySelector(".badge").textContent = (s <= now && now < e) ? "En curso ·" : "";
+  });
+
+  const line = document.getElementById("now-line");
+  if (line) {
+    const top = (now - GRID_START) / 60000 * PX_PER_MIN;
+    const h = document.querySelector(".grid").offsetHeight;
+    line.hidden = top < 0 || top > h;
+    line.style.top = top + "px";
+  }
+
+  // próxima reunión (o la que está en curso)
+  const live = EVENTS.find(e => e.start <= now && now < e.end);
+  const next = EVENTS.find(e => e.start > now);
+  const box = document.getElementById("next");
+  const ev = live || next;
+  if (!ev) { box.hidden = true; return; }
+  box.hidden = false;
+  const left = ev.start - now;
+  box.className = "next" + (live || left <= 2 * 60000 ? " now" : left <= 15 * 60000 ? " soon" : "");
+  document.getElementById("next-label").textContent = live
+    ? "En curso · termina " + new Date(ev.end).toTimeString().slice(0, 5)
+    : "Próxima · en " + fmtLeft(left);
+  document.getElementById("next-what").textContent = ev.title + " · " + ev.time;
+  const join = document.getElementById("next-join");
+  join.hidden = !ev.join;
+  if (ev.join) join.href = ev.join;
+}
+
+tick();
+setInterval(tick, 15000);
+
+// al abrir, deja la hora actual a la vista
+const line = document.getElementById("now-line");
+if (line && !line.hidden) {
+  const y = line.getBoundingClientRect().top + window.scrollY - 220;
+  if (y > 0) window.scrollTo(0, y);
+}
+
+// el daemon regenera el archivo en cada sincronización
+setTimeout(() => location.reload(), 120000);
+document.addEventListener("keydown", e => { if (e.key === "Escape") window.close(); });
+</script>
+</body>
+</html>

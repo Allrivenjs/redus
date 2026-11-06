@@ -30,6 +30,35 @@ type Config struct {
 	CountdownMinutes int `json:"countdown_minutes"`
 	// Minutos antes del inicio en que la barra pasa a estado urgente.
 	UrgentMinutes int `json:"urgent_minutes"`
+
+	// Abrir la vista del día al iniciar sesión por la mañana.
+	AgendaOnStartup bool `json:"agenda_on_startup"`
+	// Días en que se abre (0 = domingo … 6 = sábado).
+	AgendaDays []int `json:"agenda_days"`
+	// Franja horaria en que se abre, "HH:MM".
+	AgendaFrom   string `json:"agenda_from"`
+	AgendaUntil  string `json:"agenda_until"`
+	AgendaWidth  int    `json:"agenda_width"`
+	AgendaHeight int    `json:"agenda_height"`
+
+	// Chrome/Chromium con el que se abren reuniones y la agenda.
+	Browser string `json:"browser"`
+	// Perfil de Chrome por cuenta (correo -> "Profile 3"). Las cuentas que no
+	// estén se detectan solas desde el Local State de Chrome.
+	BrowserProfiles map[string]string `json:"browser_profiles"`
+}
+
+// AgendaWindow devuelve la franja de apertura en minutos desde medianoche.
+func (c Config) AgendaWindow() (from, until int) {
+	return hhmm(c.AgendaFrom, 6*60), hhmm(c.AgendaUntil, 12*60)
+}
+
+func hhmm(s string, def int) int {
+	t, err := time.Parse("15:04", s)
+	if err != nil {
+		return def
+	}
+	return t.Hour()*60 + t.Minute()
 }
 
 // Duration acepta "5m", "30s" en JSON.
@@ -64,6 +93,13 @@ func Default() Config {
 		WaybarSignal:     11,
 		CountdownMinutes: 60,
 		UrgentMinutes:    2,
+		AgendaOnStartup:  true,
+		AgendaDays:       []int{1, 2, 3, 4, 5},
+		AgendaFrom:       "06:00",
+		AgendaUntil:      "12:00",
+		Browser:          "google-chrome-stable",
+		AgendaWidth:      860,
+		AgendaHeight:     900,
 	}
 }
 
@@ -106,6 +142,7 @@ func RuntimeDir() string {
 }
 
 func File() string            { return filepath.Join(ConfigDir(), "config.json") }
+func AgendaShownFile() string { return filepath.Join(CacheDir(), "agenda-shown") }
 func CredentialsFile() string { return filepath.Join(ConfigDir(), "credentials.json") }
 func TokensDir() string       { return filepath.Join(ConfigDir(), "tokens") }
 func PIDFile() string         { return filepath.Join(RuntimeDir(), "daemon.pid") }
