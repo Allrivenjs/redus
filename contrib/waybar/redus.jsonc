@@ -1,0 +1,12 @@
+{
+  "custom/redus": {
+    "exec": "$HOME/.local/bin/redus waybar",
+    "return-type": "json",
+    "interval": 30,
+    "signal": 11,
+    "tooltip": true,
+    "on-click": "$HOME/.local/bin/redus menu",
+    "on-click-right": "$HOME/.local/bin/redus dnd toggle",
+    "on-click-middle": "$HOME/.local/bin/redus sync"
+  }
+}

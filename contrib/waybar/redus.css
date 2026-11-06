@@ -1,0 +1,16 @@
+/* >>> redus */
+#custom-redus { padding: 0 6px; }
+#custom-redus.idle,
+#custom-redus.setup,
+#custom-redus.stopped { opacity: 0.55; }
+#custom-redus.upcoming { color: #89b4fa; }
+#custom-redus.ongoing  { color: #94e2d5; }
+#custom-redus.warning  { color: #f9e2af; }
+#custom-redus.call     { color: #a6e3a1; }
+#custom-redus.urgent {
+  color: #f38ba8;
+  animation: redus-blink 1s ease-in-out infinite alternate;
+}
+#custom-redus.error { text-decoration: underline wavy #f38ba8; }
+@keyframes redus-blink { to { opacity: 0.35; } }
+/* <<< redus */

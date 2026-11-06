@@ -1,0 +1,12 @@
+[Unit]
+Description=redus: avisos de reuniones y no molestar durante llamadas
+PartOf=graphical-session.target
+After=graphical-session.target pipewire-pulse.service
+
+[Service]
+ExecStart=%h/.local/bin/redus daemon
+Restart=on-failure
+RestartSec=5
+
+[Install]
+WantedBy=graphical-session.target
